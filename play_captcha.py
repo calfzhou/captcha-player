@@ -159,10 +159,10 @@ def evaluate(ctx):
     for folder, _, filenames in os.walk(label_root):
         for filename in filenames:
             basename, ext = os.path.splitext(filename)
-            if ext != '.png':
+            if ext != recognizer.image_ext:
                 continue
 
-            captcha = basename.split('_', 1)[0]
+            captcha = basename.split(recognizer.label_filename_sep, 1)[0]
             label_image_path = os.path.join(folder, filename)
             result = recognizer.recognize(label_image_path)
 
