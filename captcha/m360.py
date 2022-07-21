@@ -25,7 +25,7 @@ class M360Captcha(BaseCaptcha):
     def __init__(self):
         super().__init__()
         self.preview_scale = 5
-        self.tesseract_lang = 'eng_fast'
+        self.tesseract_lang = 'm360'
 
     def preprocess(self, image_fp):
         image = super().preprocess(image_fp)
