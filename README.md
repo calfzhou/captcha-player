@@ -24,7 +24,7 @@ Usage: play_captcha.py [OPTIONS] COMMAND [ARGS]...
   Play with CAPTCHA.
 
 Options:
-  --captcha TEXT     which captcha class to play with  [default: base]
+  --class TEXT       which captcha class to play with  [default: base]
   --lang TEXT        use a non-default tesseract language, e.g. eng, eng_best,
                      eng_fast
   --label-root TEXT  labeling data root folder path  [default: data/labeling]

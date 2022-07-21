@@ -25,6 +25,7 @@ class M360Captcha(BaseCaptcha):
 
     def __init__(self):
         super().__init__()
+        self.preview_scale = 5
         self.tesseract_lang = 'eng_fast'
 
     def preprocess(self, image_fp):
@@ -56,10 +57,3 @@ class M360Captcha(BaseCaptcha):
         invalid_chars = set(captcha) - self.charset
         if invalid_chars:
             raise ValueError(f'contains invalid chars {invalid_chars}')
-
-        return re.match(r'^[a-z0-9]{5}$', captcha)
-
-    def _preview(self, image):
-        # Make the image larger for better human recognization.
-        scale = 5
-        image.resize((image.width * scale, image.height * scale)).show()

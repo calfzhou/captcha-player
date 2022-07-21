@@ -29,20 +29,20 @@ class CaptchaPromptType(click.ParamType):
 
 
 @click.group(context_settings={'show_default': True})
-@click.option('--captcha', 'captcha_name', default='base', help='which captcha class to play with')
+@click.option('--class', '_class', default='base', help='which captcha class to play with')
 @click.option('--lang', help='use a non-default tesseract language, e.g. eng, eng_best, eng_fast')
 @click.option('--label-root', default='data/labeling', help='labeling data root folder path')
 @click.pass_context
-def main(ctx, captcha_name, lang, label_root):
+def main(ctx, _class, lang, label_root):
     """Play with CAPTCHA."""
     # ensure that ctx.obj exists and is a dict (in case `cli()` is called
     # by means other than the `if` block below)
     ctx.ensure_object(dict)
-    ctx.obj['CAPTCHA_NAME'] = captcha_name
-    ctx.obj['LABEL_ROOT'] = os.path.join(label_root, captcha_name)
+    ctx.obj['CLASS_NAME'] = _class
+    ctx.obj['LABEL_ROOT'] = os.path.join(label_root, _class)
 
-    module = importlib.import_module(f'captcha.{captcha_name}')
-    captcha_class_name = f'{inflection.camelize(captcha_name)}Captcha'
+    module = importlib.import_module(f'captcha.{_class}')
+    captcha_class_name = f'{inflection.camelize(_class)}Captcha'
     recognizer = getattr(module, captcha_class_name)()
     if lang is not None:
         recognizer.tesseract_lang = lang
@@ -108,10 +108,10 @@ def truth(ctx, train_root):
     To list all possible characters appear in captcha, run:
     $ cat $TRAIN_ROOT/*.gt.txt | grep -o . | sort | uniq
     """
-    captcha_name = ctx.obj['CAPTCHA_NAME']
+    class_name = ctx.obj['CLASS_NAME']
     recognizer = ctx.obj['RECOGNIZER']
     label_root = ctx.obj['LABEL_ROOT']
-    train_root = os.path.join(train_root, f'{captcha_name}-ground-truth')
+    train_root = os.path.join(train_root, f'{class_name}-ground-truth')
     os.makedirs(train_root, exist_ok=True)
 
     for folder, _, filenames in os.walk(label_root):
@@ -140,9 +140,9 @@ def truth(ctx, train_root):
         To train, copy {train_root} folder to $TESSTRAIN_HOME/data, then run:
 
         $ cd $TESSTRAIN_HOME
-        $ make clean MODEL_NAME={captcha_name}
-        $ make training MODEL_NAME={captcha_name} PSM=7 START_MODEL={recognizer.train_start_model} TESSDATA="{TESSDATA_PATH}"
-        $ cp "$TESSTRAIN_HOME/data/{captcha_name}.trainneddata" "{TESSDATA_PATH}/"
+        $ make clean MODEL_NAME={class_name}
+        $ make training MODEL_NAME={class_name} PSM=7 START_MODEL={recognizer.train_start_model} TESSDATA="{TESSDATA_PATH}"
+        $ cp "$TESSTRAIN_HOME/data/{class_name}.trainneddata" "{TESSDATA_PATH}/"
     """)
     print(train_hint)
 

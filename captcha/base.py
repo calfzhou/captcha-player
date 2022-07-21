@@ -23,6 +23,7 @@ class BaseCaptcha:
 
     def __init__(self):
         self.preview_enabled = False
+        self.preview_scale = 1
         self.tesseract_lang = 'eng'
         self.tesseract_config = self._build_tesseract_config_string()
         self.train_start_model = 'eng_best'
@@ -50,5 +51,8 @@ class BaseCaptcha:
         pass
 
     def _preview(self, image):
+        if self.preview_scale != 1:
+            image = image.resize((image.width * self.preview_scale, image.height * self.preview_scale))
+
         image.show()
 
