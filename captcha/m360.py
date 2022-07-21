@@ -1,6 +1,5 @@
 
 from datetime import datetime
-import re
 import string
 import time
 
