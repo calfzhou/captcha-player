@@ -20,11 +20,16 @@ class CaptchaPromptType(click.ParamType):
         self.default = default
 
     def convert(self, value, param, ctx):
+        if value == 'skip':
+            return None
+
         try:
             self.validate_func(value)
             return value
         except Exception as e:
-            value = click.prompt(f'Invalid captcha ({e}), input again', default=self.default)
+            value = click.prompt(
+                f'Invalid captcha ({e}), input again (enter `skip` to skip)',
+                default=self.default)
             return self.convert(value, param, ctx)
 
 
@@ -88,10 +93,19 @@ def label(ctx, total, overwrite, preview):
         captcha = recognizer.recognize(temp_filename)
         captcha_type = CaptchaPromptType(recognizer.validate_captcha_input, default=captcha)
         captcha = click.prompt(
-            f'[{count} / {total}] Enter captcha of image {temp_filename}', type=captcha_type, default=captcha)
-        image_filename = os.path.join(label_root, f'{captcha}.png')
+            f'[{count} / {total}] Enter captcha of {temp_filename} (enter `skip` to skip)',
+            type=captcha_type, default=captcha)
+        if captcha is None:
+            print('skipped')
+            os.remove(temp_filename)
+            count -= 1
+            continue
+
+        image_filename = os.path.join(label_root, f'{captcha}{recognizer.image_ext}')
         if not overwrite and os.path.exists(image_filename):
-            image_filename = os.path.join(label_root, f'{captcha}.{uuid.uuid4().hex[:4]}.png')
+            image_filename = os.path.join(
+                label_root,
+                f'{captcha}{recognizer.label_filename_sep}{uuid.uuid4().hex[:4]}{recognizer.image_ext}')
 
         print('move labeled image to', image_filename)
         os.replace(temp_filename, image_filename)
@@ -167,7 +181,9 @@ def evaluate(ctx):
             result = recognizer.recognize(label_image_path)
 
             total += 1
-            if result == captcha:
+            if recognizer.case_sensitive and result == captcha:
+                correct += 1
+            elif not recognizer.case_sensitive and result.upper() == captcha.upper():
                 correct += 1
             else:
                 print(f'expected: {captcha}, actual: {result}, image: {label_image_path}')

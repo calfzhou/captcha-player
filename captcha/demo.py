@@ -19,7 +19,6 @@ class DemoCaptcha(BaseCaptcha):
 
     def __init__(self):
         super().__init__()
-        self.preview_scale = 5
         self.tesseract_lang = 'demo'
         self.image_ext = '.gif'
 

@@ -23,12 +23,13 @@ class BaseCaptcha:
 
     def __init__(self):
         self.preview_enabled = False
-        self.preview_scale = 1
+        self.preview_scale = 5
         self.tesseract_lang = 'eng'
         self.tesseract_config = self._build_tesseract_config_string()
         self.train_start_model = 'eng_best'
         self.label_filename_sep = '_'
         self.image_ext = '.png'
+        self.case_sensitive = False
 
     def preprocess(self, image_fp):
         image = Image.open(image_fp)
