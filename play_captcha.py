@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import importlib
 import os
+from pathlib import Path
 import tempfile
 from textwrap import dedent
 import uuid
@@ -36,15 +37,16 @@ class CaptchaPromptType(click.ParamType):
 @click.group(context_settings={'show_default': True})
 @click.option('--class', '_class', default='base', help='which captcha class to play with')
 @click.option('--lang', help='use a non-default tesseract language, e.g. eng, eng_best, eng_fast')
-@click.option('--label-root', default='data/labeling', help='labeling data root folder path')
+@click.option('--label-root', type=click.Path(file_okay=False, writable=True, path_type=Path),
+              default='data/labeling', help='labeling data root folder path')
 @click.pass_context
-def main(ctx, _class, lang, label_root):
+def main(ctx, _class: str, lang: str, label_root: Path):
     """Play with CAPTCHA."""
     # ensure that ctx.obj exists and is a dict (in case `cli()` is called
     # by means other than the `if` block below)
     ctx.ensure_object(dict)
     ctx.obj['CLASS_NAME'] = _class
-    ctx.obj['LABEL_ROOT'] = os.path.join(label_root, _class)
+    ctx.obj['LABEL_ROOT'] = label_root.joinpath(_class)
 
     module = importlib.import_module(f'captcha.{_class}')
     captcha_class_name = f'{inflection.camelize(_class)}Captcha'
@@ -55,11 +57,11 @@ def main(ctx, _class, lang, label_root):
     ctx.obj['RECOGNIZER'] = recognizer
 
 
-@click.command()
-@click.argument('image', type=click.Path(exists=True, dir_okay=False))
+@main.command()
+@click.argument('image', type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option('--preview/--no-preview', default=False, help='whether preview the image')
 @click.pass_context
-def test(ctx, image, preview):
+def test(ctx, image: Path, preview: bool):
     """Try recognize given image."""
     recognizer = ctx.obj['RECOGNIZER']
     recognizer.preview_enabled = preview
@@ -67,19 +69,19 @@ def test(ctx, image, preview):
     print(text)
 
 
-@click.command()
+@main.command()
 @click.option('-n', '--total', default=10,
               help='number of new images to fetch and label (0 for unlimited)')
 @click.option('--overwrite/--no-overwrite', default=False,
               help='whether overwrite existing image for the same captcha')
 @click.option('--preview/--no-preview', default=True, help='whether show image automatically')
 @click.pass_context
-def label(ctx, total, overwrite, preview):
+def label(ctx, total: int, overwrite: bool, preview: bool):
     """Crawl and label training data."""
-    label_root = ctx.obj['LABEL_ROOT']
     recognizer = ctx.obj['RECOGNIZER']
     recognizer.preview_enabled = preview
-    os.makedirs(label_root, exist_ok=True)
+    label_root: Path = ctx.obj['LABEL_ROOT']
+    label_root.mkdir(parents=True, exist_ok=True)
 
     count = 0
     while total == 0 or count < total:
@@ -87,34 +89,34 @@ def label(ctx, total, overwrite, preview):
         request_args = recognizer.image_request_args()
         response = requests.get(**request_args)
         with tempfile.NamedTemporaryFile(delete=False) as f:
-            temp_filename = f.name
+            temp_filepath = Path(f.name)
             f.write(response.content)
 
-        captcha = recognizer.recognize(temp_filename)
+        captcha = recognizer.recognize(temp_filepath)
         captcha_type = CaptchaPromptType(recognizer.validate_captcha_input, default=captcha)
         captcha = click.prompt(
-            f'[{count} / {total}] Enter captcha of {temp_filename} (enter `skip` to skip)',
+            f'[{count} / {total}] Enter captcha of {temp_filepath} (enter `skip` to skip)',
             type=captcha_type, default=captcha)
         if captcha is None:
             print('skipped')
-            os.remove(temp_filename)
+            temp_filepath.unlink()
             count -= 1
             continue
 
-        image_filename = os.path.join(label_root, f'{captcha}{recognizer.image_ext}')
-        if not overwrite and os.path.exists(image_filename):
-            image_filename = os.path.join(
-                label_root,
-                f'{captcha}{recognizer.label_filename_sep}{uuid.uuid4().hex[:4]}{recognizer.image_ext}')
+        image_path = label_root.joinpath(captcha).with_suffix(recognizer.image_ext)
+        if not overwrite and image_path.exists():
+            new_stem = f'{captcha}{recognizer.label_filename_sep}{uuid.uuid4().hex[:4]}'
+            image_path = image_path.with_stem(new_stem)
 
-        print('move labeled image to', image_filename)
-        os.replace(temp_filename, image_filename)
+        print('move labeled image to', image_path)
+        temp_filepath.replace(image_path)
 
 
-@click.command()
-@click.option('--train-root', default='data/training', help='training data root folder path')
+@main.command()
+@click.option('--train-root', type=click.Path(file_okay=False, writable=True, path_type=Path),
+              default='data/training', help='training data root folder path')
 @click.pass_context
-def truth(ctx, train_root):
+def truth(ctx, train_root: Path):
     """Build ground truth data for tesseract training.
 
     It generates cleaned images and labeled transcripts.
@@ -122,31 +124,31 @@ def truth(ctx, train_root):
     To list all possible characters appear in captcha, run:
     $ cat $TRAIN_ROOT/*.gt.txt | grep -o . | sort | uniq
     """
-    class_name = ctx.obj['CLASS_NAME']
+    class_name: str = ctx.obj['CLASS_NAME']
     recognizer = ctx.obj['RECOGNIZER']
-    label_root = ctx.obj['LABEL_ROOT']
-    train_root = os.path.join(train_root, f'{class_name}-ground-truth')
-    os.makedirs(train_root, exist_ok=True)
+    label_root: Path = ctx.obj['LABEL_ROOT']
+    train_root = train_root.joinpath(f'{class_name}-ground-truth')
+    train_root.mkdir(parents=True, exist_ok=True)
 
     for folder, _, filenames in os.walk(label_root):
+        folder = Path(folder)
         for filename in filenames:
-            basename, ext = os.path.splitext(filename)
+            basename, ext = (p := Path(filename)).stem, p.suffix
             if ext != recognizer.image_ext:
                 continue
 
             captcha = basename.split(recognizer.label_filename_sep, 1)[0]
-            label_image_path = os.path.join(folder, filename)
-            train_basename = os.path.splitext(label_image_path)[0]
-            train_basename = os.path.relpath(train_basename, folder).replace(os.path.sep, '-')
-            train_image_path = os.path.join(train_root, f'{train_basename}.png')
-            transcript_path = os.path.join(train_root, f'{train_basename}.gt.txt')
+            label_image_path = folder.joinpath(filename)
+            formatted_name = str(label_image_path.relative_to(label_root)).replace(os.path.sep, '-')
+            train_image_path = train_root.joinpath(formatted_name).with_suffix('.png')
+            transcript_path = train_image_path.with_suffix('.gt.txt')
 
-            print('labeled:', label_image_path, f'[{captcha}]')
+            print(f'labeled:', label_image_path, f'[{captcha}]')
             print('      =>', train_image_path)
             print('      =>', transcript_path)
             image = recognizer.preprocess(label_image_path)
             image.save(train_image_path)
-            with open(transcript_path, 'w') as f:
+            with transcript_path.open('w') as f:
                 f.write(captcha)
                 f.write('\n')
 
@@ -161,23 +163,24 @@ def truth(ctx, train_root):
     print(train_hint)
 
 
-@click.command()
+@main.command()
 @click.pass_context
 def evaluate(ctx):
     """Evaluate trained model through all labeling images."""
-    label_root = ctx.obj['LABEL_ROOT']
+    label_root: Path = ctx.obj['LABEL_ROOT']
     recognizer = ctx.obj['RECOGNIZER']
 
     total = 0
     correct = 0
     for folder, _, filenames in os.walk(label_root):
+        folder = Path(folder)
         for filename in filenames:
-            basename, ext = os.path.splitext(filename)
+            basename, ext = (p := Path(filename)).stem, p.suffix
             if ext != recognizer.image_ext:
                 continue
 
             captcha = basename.split(recognizer.label_filename_sep, 1)[0]
-            label_image_path = os.path.join(folder, filename)
+            label_image_path = folder.joinpath(filename)
             result = recognizer.recognize(label_image_path)
 
             total += 1
@@ -191,11 +194,6 @@ def evaluate(ctx):
     precision = correct / total * 100 if total > 0 else 0
     print(f'evaluation result: {correct} of {total} [{precision:.1f}%] are correct')
 
-
-main.add_command(test)
-main.add_command(label)
-main.add_command(truth)
-main.add_command(evaluate)
 
 if __name__ == '__main__':
     main()

@@ -1,16 +1,17 @@
 
-import os
+from pathlib import Path
+from typing import IO, Union
 
 from PIL import Image
 import pytesseract
 
-TESSDATA_PATH = os.path.join(os.path.dirname(__file__), 'tessdata')
+TESSDATA_PATH = Path(__file__).with_name('tessdata')
 
 
 class BaseCaptcha:
     @classmethod
     @property
-    def tesseract_config_array(cls):
+    def tesseract_config_array(cls) -> list[str]:
         config = [
             '--tessdata-dir', f'"{TESSDATA_PATH}"',
             '--psm', '7', # Treat the image as a single text line.
@@ -31,27 +32,27 @@ class BaseCaptcha:
         self.image_ext = '.png'
         self.case_sensitive = False
 
-    def preprocess(self, image_fp):
+    def preprocess(self, image_fp: Union[str, Path, IO]) -> Image:
         image = Image.open(image_fp)
         if self.preview_enabled:
             self._preview(image)
 
         return image
 
-    def recognize(self, image_fp):
+    def recognize(self, image_fp: Union[str, Path, IO]) -> str:
         image = self.preprocess(image_fp)
         text = pytesseract.image_to_string(image, lang=self.tesseract_lang, config=self.tesseract_config)
         text = text.strip() # There might be an extra `\n` at the end of the string.
         return text
 
-    def image_request_args(self):
+    def image_request_args(self) -> dict:
         raise NotImplementedError
 
-    def validate_captcha_input(self, captcha):
+    def validate_captcha_input(self, captcha: str) -> None:
         # Implement custom validation in subclasses.
         pass
 
-    def _preview(self, image):
+    def _preview(self, image: Image):
         if self.preview_scale != 1:
             image = image.resize((image.width * self.preview_scale, image.height * self.preview_scale))
 
